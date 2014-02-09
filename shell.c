@@ -45,14 +45,16 @@ isBuiltInCommand(char * cmd){
 int 
 main (int argc, char **argv)
 {
+  FILE* infile;
+  FILE* outfile;
   const char* path;
   char* history[10];
   char* cmdLine;
   char* temp;
-  char  dummy;
+  char dummy;
   char cmd;
   int hist_entry;
-  int  hist_exec;
+  int hist_exec;
   int x;
   parseInfo *info; /*info stores all the information returned by parser.*/
   struct commandType *com; /*com stores command name and Arg list for one command.*/
@@ -119,7 +121,16 @@ else{
       path = com->VarList[1];
       chdir(path);
     }
+    
+    if(strcmp(info->infile,"")!=0){
+	infile = fopen(info->infile, "r");
+	dup2(fileno(infile),fileno(stdin));
+    }
 
+    if(strcmp(info->outfile,"")!=0){
+	outfile = fopen(info->outfile, "w");
+	dup2(fileno(outfile),fileno(stdout));
+    }
 
     /*insert your code here.*/
 
