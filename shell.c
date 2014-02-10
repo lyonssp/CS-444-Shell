@@ -69,6 +69,7 @@ isBuiltInCommand(char * cmd){
 int 
 main (int argc, char **argv)
 {
+  int childPID;
   int i;
   int id;
   pid_t pid;
@@ -78,6 +79,7 @@ main (int argc, char **argv)
   char* history[10];
   char* jobs[10];
   char* cmdLine;
+  char* arg;
   int hist_entry;
   int hist_exec = 0; /*will determine whether "!x" was the previous command.  Stalls readline for one "while" iteration*/
   int x;
@@ -122,15 +124,16 @@ else{
 	    continue;
 	}
 	/*CHECK IF HISTORY BUFFER HAS BEEN FILLED*/
-	if(history_count<hist_max_size){	
+	if(history_count<hist_max_size){
 	    cmdLine = (char*)malloc((strlen(history[hist_entry])+1)*sizeof(char));
 	    strcpy(cmdLine,history[history_count-hist_entry]);
 	}
+	/*IF BUFFER HAS BEEN FILLED*/
 	else{
 	    cmdLine = (char*)malloc((strlen(history[hist_entry])+1)*sizeof(char));
             strcpy(cmdLine,history[hist_max_size-hist_entry]);
 	} 
-	    hist_exec = 1;
+	    hist_exec = 1; /*FLAG EXECUTION FROM HISTORY*/
 	    continue;
     }
     else if(sscanf(cmdLine,"!%d",&hist_entry) != 0){
@@ -138,7 +141,7 @@ else{
 	if((hist_entry-1 > history_count) || (hist_entry > 10) || (hist_entry < 1)){
 	    fprintf(stderr,"!%d does not specify a command in history\n",&hist_entry);
 	    continue;
-	}	
+	}
 	cmdLine = (char*)malloc((strlen(history[hist_entry])+1)*sizeof(char));
 	strcpy(cmdLine,history[hist_entry-1]);
 	hist_exec = 1;
@@ -188,8 +191,11 @@ else{
       printf("cd <relative or absolute directory>\nkill %%jobnumber\nhistory\njobs\nexit\n");
     }
     else if (isBuiltInCommand(com->command) == KILL){
-      id = (int) com->VarList[1];
-      if((kill(id,SIGKILL))<0){
+      arg = (char*) com->VarList[1];
+      if(sscanf(arg,"%%%d",id)!=0){ /*Check for "kill background job" command*/
+	    kill_job(id);
+      }
+      else if((kill(id,SIGKILL))<0){ /*Make sure kill does not fail*/
 	fprintf(stderr,"ERROR SENDING KILL SIGNAL\n");
 	continue;
       }
@@ -200,10 +206,8 @@ else{
     else if (isBuiltInCommand(com->command) == JOBS){
 	display_jobs(jobs);
     }   
-
-    /*Code for I/O Re-direct*/
-    if(info->boolInfile || info->boolOutfile){
-	
+    /*Code for I/O Re-direction*/
+    else if(info->boolInfile || info->boolOutfile){
 	if((pid = fork()) < 0){
 	    fprintf(stderr,"I/O REDIRECT FORK FAILED\n");
 	    continue;
@@ -214,7 +218,7 @@ else{
 		dup2(fileno(infile),fileno(stdin));
 		fclose(infile);
 	    }
-	    if(info->boolOutfile){		
+	    if(info->boolOutfile){
 		outfile = fopen(info->outFile, "w");
 		dup2(fileno(outfile),fileno(stdout));
 		fclose(outfile);
@@ -223,6 +227,21 @@ else{
 	}
 	else{
 	    wait(0); /*wait for child process*/
+	}
+    }
+    /*Code to execute other commands*/
+    else{
+	childPID = fork();
+	if(childPID == 0){
+	    execvp(info->CommArray[0].command,info->CommArray[0].VarList);
+	}
+	else{
+	    if(info->boolBackground){
+		save_job(cmdLine,jobs);
+	    }
+	    else{
+		waitpid(childPID);
+	    }
 	}
     }
 
